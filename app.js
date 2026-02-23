@@ -125,6 +125,7 @@ function renderDeck() {
   });
 
   deckEl.removeAttribute("aria-busy");
+  initCards();
 }
 
 function resetDeck() {
@@ -132,16 +133,120 @@ function resetDeck() {
   renderDeck();
 }
 
-// Controls (intentionally not implemented)
-likeBtn.addEventListener("click", () => {
-  console.log("Like clicked.");
+let topCard = null;
+let startX = 0, startY = 0, currentX = 0, currentY = 0;
+let isDragging = false;
+let lastTapTime = 0;
+
+function initCards() {
+  const cards = Array.from(deckEl.querySelectorAll('.card'));
+  cards.forEach((card, idx) => {
+    card.style.zIndex = cards.length - idx;
+  });
+  topCard = deckEl.firstElementChild;
+}
+
+function handleNextPhoto(card) {
+  if (!card) return;
+  console.log("Next photo triggered");
+  const img = card.querySelector('.card__media');
+  if (img) {
+    const oldFilter = img.style.filter;
+    img.style.filter = 'brightness(1.5)';
+    setTimeout(() => { img.style.filter = oldFilter; }, 150);
+  }
+}
+
+function handleReject(card) {
+  if (!card) return;
+  if (card === topCard) topCard = null;
+  card.style.transform = `translate(-200%, 20%) rotate(-30deg)`;
+  card.style.opacity = '0';
+  removeCard(card);
+}
+
+function handleLike(card) {
+  if (!card) return;
+  if (card === topCard) topCard = null;
+  card.style.transform = `translate(200%, 20%) rotate(30deg)`;
+  card.style.opacity = '0';
+  removeCard(card);
+}
+
+function handleSuperLike(card) {
+  if (!card) return;
+  if (card === topCard) topCard = null;
+  card.style.transform = `translate(0, -200%)`;
+  card.style.opacity = '0';
+  removeCard(card);
+}
+
+function removeCard(card) {
+  setTimeout(() => {
+    if (card.parentNode) card.parentNode.removeChild(card);
+    initCards();
+  }, 220);
+}
+
+deckEl.addEventListener('pointerdown', (e) => {
+  const targetCard = e.target.closest('.card');
+  if (!topCard || !targetCard || targetCard !== topCard) return;
+  
+  isDragging = true;
+  startX = e.clientX;
+  startY = e.clientY;
+  currentX = startX;
+  currentY = startY;
+  topCard.classList.add('card--dragging');
 });
-nopeBtn.addEventListener("click", () => {
-  console.log("Nope clicked.");
+
+deckEl.addEventListener('pointermove', (e) => {
+  if (!isDragging || !topCard) return;
+  
+  e.preventDefault(); // Prevent touch scrolling during drag
+  currentX = e.clientX;
+  currentY = e.clientY;
+  const dx = currentX - startX;
+  const dy = currentY - startY;
+  
+  const rotate = dx * 0.05;
+  topCard.style.transform = `translate(${dx}px, ${dy}px) rotate(${rotate}deg)`;
 });
-superLikeBtn.addEventListener("click", () => {
-  console.log("Super Like clicked.");
-});
+
+function handlePointerUp() {
+  if (!isDragging || !topCard) return;
+  isDragging = false;
+  topCard.classList.remove('card--dragging');
+  
+  const dx = currentX - startX;
+  const dy = currentY - startY;
+  const distance = Math.hypot(dx, dy);
+  
+  if (distance < 10) {
+    const now = Date.now();
+    if (now - lastTapTime < 300) {
+      handleNextPhoto(topCard);
+      lastTapTime = 0;
+    } else {
+      lastTapTime = now;
+      topCard.style.transform = '';
+    }
+  } else if (Math.abs(dx) > 80) {
+    if (dx > 0) handleLike(topCard);
+    else handleReject(topCard);
+  } else if (dy < -80) {
+    handleSuperLike(topCard);
+  } else {
+    topCard.style.transform = '';
+  }
+}
+
+document.addEventListener('pointerup', handlePointerUp);
+document.addEventListener('pointercancel', handlePointerUp);
+
+likeBtn.addEventListener("click", () => handleLike(topCard));
+nopeBtn.addEventListener("click", () => handleReject(topCard));
+superLikeBtn.addEventListener("click", () => handleSuperLike(topCard));
 shuffleBtn.addEventListener("click", resetDeck);
 
 // Boot

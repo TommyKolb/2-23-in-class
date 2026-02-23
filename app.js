@@ -51,7 +51,13 @@ function imgFor(seed) {
 }
 
 function pickPhotos(count = 4) {
-  const shuffled = [...UNSPLASH_SEEDS].sort(() => Math.random() - 0.5);
+  const shuffled = [...UNSPLASH_SEEDS];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = shuffled[i];
+    shuffled[i] = shuffled[j];
+    shuffled[j] = tmp;
+  }
   return shuffled.slice(0, count).map((seed) => imgFor(seed));
 }
 
@@ -187,6 +193,7 @@ function resolveDecision(action) {
     if (profiles.length === 0) {
       profiles = generateProfiles(12);
     }
+    lastTap = { time: 0, x: 0, y: 0 };
     renderDeck();
     isAnimating = false;
     setControlsDisabled(false);
@@ -294,7 +301,8 @@ function attachTopCardHandlers() {
     topCard.style.transform = "";
   });
 
-  topCard.addEventListener("pointercancel", () => {
+  topCard.addEventListener("pointercancel", (event) => {
+    if (pointerId !== event.pointerId) return;
     pointerId = null;
     topCard.style.transition = "transform 180ms ease";
     topCard.style.transform = "";

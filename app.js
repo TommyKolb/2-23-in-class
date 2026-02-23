@@ -50,9 +50,15 @@ function imgFor(seed) {
   return `https://images.unsplash.com/photo-${seed}?auto=format&fit=crop&w=1200&q=80`;
 }
 
+function pickPhotos(count = 4) {
+  const shuffled = [...UNSPLASH_SEEDS].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count).map((seed) => imgFor(seed));
+}
+
 function generateProfiles(count = 12) {
   const profiles = [];
   for (let i = 0; i < count; i++) {
+    const photos = pickPhotos();
     profiles.push({
       id: `p_${i}_${Date.now().toString(36)}`,
       name: sample(FIRST_NAMES),
@@ -61,7 +67,9 @@ function generateProfiles(count = 12) {
       title: sample(JOBS),
       bio: sample(BIOS),
       tags: pickTags(),
-      img: imgFor(sample(UNSPLASH_SEEDS)),
+      img: photos[0],
+      photos,
+      photoIndex: 0,
     });
   }
   return profiles;
@@ -77,18 +85,24 @@ const nopeBtn = document.getElementById("nopeBtn");
 const superLikeBtn = document.getElementById("superLikeBtn");
 
 let profiles = [];
+let isAnimating = false;
+let lastTap = { time: 0, x: 0, y: 0 };
 
 function renderDeck() {
   deckEl.setAttribute("aria-busy", "true");
   deckEl.innerHTML = "";
 
-  profiles.forEach((p, idx) => {
+  const visibleProfiles = profiles.slice(-3).reverse();
+
+  visibleProfiles.forEach((p, idx) => {
     const card = document.createElement("article");
     card.className = "card";
+    card.dataset.profileId = p.id;
+    card.style.zIndex = String(100 - idx);
 
     const img = document.createElement("img");
     img.className = "card__media";
-    img.src = p.img;
+    img.src = p.photos[p.photoIndex];
     img.alt = `${p.name} — profile photo`;
 
     const body = document.createElement("div");
@@ -125,6 +139,7 @@ function renderDeck() {
   });
 
   deckEl.removeAttribute("aria-busy");
+  attachTopCardHandlers();
 }
 
 function resetDeck() {
@@ -132,17 +147,167 @@ function resetDeck() {
   renderDeck();
 }
 
-// Controls (intentionally not implemented)
-likeBtn.addEventListener("click", () => {
-  console.log("Like clicked.");
+function getTopCard() {
+  return deckEl.querySelector(".card");
+}
+
+function getTopProfile() {
+  return profiles[profiles.length - 1] || null;
+}
+
+function setControlsDisabled(disabled) {
+  likeBtn.disabled = disabled;
+  nopeBtn.disabled = disabled;
+  superLikeBtn.disabled = disabled;
+  shuffleBtn.disabled = disabled;
+}
+
+function resolveDecision(action) {
+  if (isAnimating) return;
+  const topCard = getTopCard();
+  if (!topCard) return;
+
+  const transforms = {
+    nope: "translate(-520px, -30px) rotate(-18deg)",
+    like: "translate(520px, -30px) rotate(18deg)",
+    superlike: "translate(0, -560px) rotate(0deg)",
+  };
+  const outTransform = transforms[action];
+  if (!outTransform) return;
+
+  isAnimating = true;
+  setControlsDisabled(true);
+
+  topCard.style.transition = "transform 240ms ease, opacity 240ms ease";
+  topCard.style.transform = outTransform;
+  topCard.style.opacity = "0";
+
+  window.setTimeout(() => {
+    profiles.pop();
+    if (profiles.length === 0) {
+      profiles = generateProfiles(12);
+    }
+    renderDeck();
+    isAnimating = false;
+    setControlsDisabled(false);
+  }, 250);
+}
+
+function advanceTopPhoto() {
+  const topProfile = getTopProfile();
+  const topCard = getTopCard();
+  if (!topProfile || !topCard || topProfile.photos.length < 2) return;
+
+  topProfile.photoIndex = (topProfile.photoIndex + 1) % topProfile.photos.length;
+  const img = topCard.querySelector(".card__media");
+  if (!img) return;
+
+  img.src = topProfile.photos[topProfile.photoIndex];
+}
+
+function attachTopCardHandlers() {
+  const topCard = getTopCard();
+  if (!topCard) return;
+
+  let pointerId = null;
+  let startX = 0;
+  let startY = 0;
+  let currentX = 0;
+  let currentY = 0;
+  let startTime = 0;
+  let moved = false;
+
+  topCard.style.touchAction = "none";
+
+  topCard.addEventListener("pointerdown", (event) => {
+    if (isAnimating) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+
+    pointerId = event.pointerId;
+    startX = event.clientX;
+    startY = event.clientY;
+    currentX = event.clientX;
+    currentY = event.clientY;
+    startTime = Date.now();
+    moved = false;
+
+    topCard.style.transition = "";
+    topCard.setPointerCapture(pointerId);
+  });
+
+  topCard.addEventListener("pointermove", (event) => {
+    if (pointerId !== event.pointerId) return;
+
+    currentX = event.clientX;
+    currentY = event.clientY;
+    const dx = currentX - startX;
+    const dy = currentY - startY;
+    const distance = Math.hypot(dx, dy);
+
+    if (distance > 6) moved = true;
+    if (!moved) return;
+
+    const rotation = Math.max(-18, Math.min(18, dx / 12));
+    topCard.style.transform = `translate(${dx}px, ${dy}px) rotate(${rotation}deg)`;
+  });
+
+  topCard.addEventListener("pointerup", (event) => {
+    if (pointerId !== event.pointerId) return;
+    topCard.releasePointerCapture(pointerId);
+    pointerId = null;
+
+    const dx = currentX - startX;
+    const dy = currentY - startY;
+    const elapsed = Date.now() - startTime;
+
+    if (!moved && elapsed < 260) {
+      const now = Date.now();
+      const sinceLastTap = now - lastTap.time;
+      const tapDistance = Math.hypot(event.clientX - lastTap.x, event.clientY - lastTap.y);
+
+      if (sinceLastTap < 320 && tapDistance < 24) {
+        lastTap = { time: 0, x: 0, y: 0 };
+        advanceTopPhoto();
+        return;
+      }
+
+      lastTap = { time: now, x: event.clientX, y: event.clientY };
+    }
+
+    const horizontalThreshold = 90;
+    const verticalThreshold = 110;
+
+    if (Math.abs(dx) > Math.abs(dy) && dx > horizontalThreshold) {
+      resolveDecision("like");
+      return;
+    }
+    if (Math.abs(dx) > Math.abs(dy) && dx < -horizontalThreshold) {
+      resolveDecision("nope");
+      return;
+    }
+    if (Math.abs(dy) > Math.abs(dx) && dy < -verticalThreshold) {
+      resolveDecision("superlike");
+      return;
+    }
+
+    topCard.style.transition = "transform 180ms ease";
+    topCard.style.transform = "";
+  });
+
+  topCard.addEventListener("pointercancel", () => {
+    pointerId = null;
+    topCard.style.transition = "transform 180ms ease";
+    topCard.style.transform = "";
+  });
+}
+
+likeBtn.addEventListener("click", () => resolveDecision("like"));
+nopeBtn.addEventListener("click", () => resolveDecision("nope"));
+superLikeBtn.addEventListener("click", () => resolveDecision("superlike"));
+shuffleBtn.addEventListener("click", () => {
+  if (isAnimating) return;
+  resetDeck();
 });
-nopeBtn.addEventListener("click", () => {
-  console.log("Nope clicked.");
-});
-superLikeBtn.addEventListener("click", () => {
-  console.log("Super Like clicked.");
-});
-shuffleBtn.addEventListener("click", resetDeck);
 
 // Boot
 resetDeck();

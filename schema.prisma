@@ -1,0 +1,75 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  age          Int
+  city         String
+  title        String
+  bio          String
+  tags         String[]
+  photos       String[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  swipesGiven    Swipe[]       @relation("SwipesGiven")
+  swipesReceived Swipe[]       @relation("SwipesReceived")
+  matchesAsA     Match[]       @relation("MatchUserA")
+  matchesAsB     Match[]       @relation("MatchUserB")
+  refreshTokens  RefreshToken[]
+}
+
+model Swipe {
+  id         String     @id @default(uuid())
+  fromUserId String
+  toUserId   String
+  action     SwipeAction
+  createdAt  DateTime   @default(now())
+
+  fromUser User @relation("SwipesGiven",    fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUser   User @relation("SwipesReceived", fields: [toUserId],   references: [id], onDelete: Cascade)
+
+  @@unique([fromUserId, toUserId])
+  @@index([toUserId])
+}
+
+model Match {
+  id         String   @id @default(uuid())
+  userAId    String
+  userBId    String
+  superLiked Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  userA User @relation("MatchUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB User @relation("MatchUserB", fields: [userBId], references: [id], onDelete: Cascade)
+
+  @@unique([userAId, userBId])
+  @@index([userBId])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum SwipeAction {
+  LIKE
+  NOPE
+  SUPERLIKE
+}

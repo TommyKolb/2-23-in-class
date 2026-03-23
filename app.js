@@ -394,6 +394,28 @@ nopeBtn.addEventListener("click", () => handleReject(topCard));
 superLikeBtn.addEventListener("click", () => handleSuperLike(topCard));
 shuffleBtn.addEventListener("click", resetDeck);
 
+// ─── Test hooks (only when Jest sets global flag before loading this file) ───
+if (typeof globalThis !== "undefined" && globalThis.__APP_TEST_EXPOSE__) {
+  globalThis.__appTest = {
+    generateProfiles,
+    sample,
+    pickTags,
+    imgFor,
+    handleReject,
+    handleLike,
+    handleSuperLike,
+    handleNextPhoto,
+    recordLike,
+    removeCard,
+    drainMatchQueue,
+    queueMatch,
+    showMatchBanner,
+    hideBanner,
+    pollMatches,
+    startPolling,
+  };
+}
+
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 resetDeck();
 startPolling();

@@ -1,4 +1,4 @@
-// data.js
+// data.mjs
 // Random-ish profile generator using seeded lists. Images use Unsplash.
 //
 // Students: you can swap this out for your own data source later.

@@ -24,7 +24,8 @@ const PORT = process.env.PORT || 3000;
 
 // ─── Database setup ───────────────────────────────────────────────────────────
 
-const DB_PATH = path.join(__dirname, "tinder.db");
+const DB_PATH =
+    process.env.NODE_ENV === "test" ? ":memory:" : path.join(__dirname, "tinder.db");
 const db = new Database(DB_PATH);
 
 // Enable WAL mode for better concurrent read performance
@@ -222,15 +223,40 @@ app.delete("/api/likes/:id", (req, res) => {
 
 // ─── Graceful shutdown ────────────────────────────────────────────────────────
 
-process.on("SIGINT", () => { db.close(); process.exit(0); });
-process.on("SIGTERM", () => { db.close(); process.exit(0); });
+function registerSignalHandlers() {
+    process.on("SIGINT", () => { db.close(); process.exit(0); });
+    process.on("SIGTERM", () => { db.close(); process.exit(0); });
+}
+
+// Avoid stacking listeners when the module is re-loaded in tests (jest.resetModules).
+if (process.env.NODE_ENV !== "test") {
+    registerSignalHandlers();
+}
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 
-app.listen(PORT, () => {
-    console.log(`\n🔥 AI-Tinder backend  →  http://localhost:${PORT}`);
-    console.log(`   POST   /api/likes          record a like`);
-    console.log(`   GET    /api/matches        poll for new matches`);
-    console.log(`   GET    /api/likes          inspect the likes DB`);
-    console.log(`   DELETE /api/likes/:id      remove a like\n`);
-});
+function startListeningServer() {
+    app.listen(PORT, () => {
+        console.log(`\n🔥 AI-Tinder backend  →  http://localhost:${PORT}`);
+        console.log(`   POST   /api/likes          record a like`);
+        console.log(`   GET    /api/matches        poll for new matches`);
+        console.log(`   GET    /api/likes          inspect the likes DB`);
+        console.log(`   DELETE /api/likes/:id      remove a like\n`);
+    });
+}
+
+if (require.main === module) {
+    startListeningServer();
+}
+
+if (process.env.NODE_ENV === "test") {
+    app.__aiTinderTest = {
+        hydrateRow,
+        saveLikeAndTryMatch,
+        db,
+        registerSignalHandlers,
+        startListeningServer,
+    };
+}
+
+module.exports = app;
